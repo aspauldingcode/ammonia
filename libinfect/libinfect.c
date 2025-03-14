@@ -186,6 +186,10 @@ bool PathRestricted(const char *path) {
     return true;
 }
 
+bool PathDriver(const char *path) {
+    return (strstr(path, "Driver") != NULL);
+}
+
 int SpawnNew(pid_t * pid, const char * path, const posix_spawn_file_actions_t * ac, const posix_spawnattr_t * ab, char *const __argv[], char *const __envp[]) {
     char *fakeEnvVar;
     
@@ -193,7 +197,11 @@ int SpawnNew(pid_t * pid, const char * path, const posix_spawn_file_actions_t * 
         fakeEnvVar = "DYLD_INSERT_LIBRARIES="SupportFolderP"liblibinfect.dylib";
     } else if (PathRestricted(path) == false) {
         if (LoadsAppKit(path, "AppKit") == 1) {
-            fakeEnvVar = "DYLD_INSERT_LIBRARIES="SupportFolderP"libopener.dylib";
+            if (!PathDriver(path)) {
+                fakeEnvVar = "DYLD_INSERT_LIBRARIES="SupportFolderP"libopener.dylib";
+            } else {
+                return SpawnOld(pid, path, ac, ab, __argv, __envp);
+            }
         } else {
             return SpawnOld(pid, path, ac, ab, __argv, __envp);
         }
