@@ -8,6 +8,7 @@
 #include <bootstrap.h>
 #include <mach-o/dyld.h>
 #include <pthread.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -25,6 +26,7 @@
 #include <sys/sysctl.h>
 #include <unistd.h>
 
+#include "../CoreSymbolication.h"
 #include "ammonia.h"
 #include "frida-gum.h"
 
@@ -122,52 +124,81 @@ int Pid2Name(const char *proc_name) {
 }
 
 int (*SpawnOld)(pid_t * pid, const char * path, const posix_spawn_file_actions_t * ac, const posix_spawnattr_t * ab, char *const __argv[], char *const __envp[]);
-int SpawnNew(pid_t * pid, const char * path, const posix_spawn_file_actions_t * ac, const posix_spawnattr_t * ab, char *const __argv[], char *const __envp[])
-{
+
+bool LoadsAppKit(const char *path, const char *framework) {
+    int fd = open(path, O_RDONLY);
+    if (fd < 0) {
+        perror("open");
+        return -1;
+    }
+
+    off_t file_size = lseek(fd, 0, SEEK_END);
+    if (file_size == -1) {
+        perror("lseek");
+        close(fd);
+        return -1;
+    }
+    
+    void *map = mmap(NULL, file_size, PROT_READ, MAP_PRIVATE, fd, 0);
+    if (map == MAP_FAILED) {
+        perror("mmap");
+        close(fd);
+        return -1;
+    }
+
+    struct mach_header_64 *mh = (struct mach_header_64 *)map;
+    if (mh->magic != MH_MAGIC_64) {
+        fprintf(stderr, "Unsupported file format or architecture\n");
+        munmap(map, file_size);
+        close(fd);
+        return -1;
+    }
+
+    struct load_command *cmd = (struct load_command *)((char *)mh + sizeof(struct mach_header_64));
+    for (uint32_t i = 0; i < mh->ncmds; i++) {
+        if (cmd->cmd == LC_LOAD_DYLIB || cmd->cmd == LC_LOAD_WEAK_DYLIB) {
+            struct dylib_command *dylib = (struct dylib_command *)cmd;
+            const char *dylib_name = (char *)dylib + dylib->dylib.name.offset;
+            if (strstr(dylib_name, framework)) {
+                munmap(map, file_size);
+                close(fd);
+                return 1; // Framework found
+            }
+        }
+        cmd = (struct load_command *)((char *)cmd + cmd->cmdsize);
+    }
+
+    munmap(map, file_size);
+    close(fd);
+    return 0; // Framework not found
+}
+
+bool PathRestricted(const char *path) {
+    if (!path) return false;
+    
+    const char *framework = strstr(path, ".framework/");
+    if (!framework) return false; // Not inside a framework
+
+    // Ensure it's not inside an .app bundle
+    const char *app = strstr(path, ".app/");
+    if (app && app < framework) return false; // If .app appears before .framework, it's inside an app
+
+    return true;
+}
+
+int SpawnNew(pid_t * pid, const char * path, const posix_spawn_file_actions_t * ac, const posix_spawnattr_t * ab, char *const __argv[], char *const __envp[]) {
     char *fakeEnvVar;
     
-    if (strcmp(path, "/usr/libexec/xpcproxy") == 0)
-    {
+    if (strcmp(path, "/usr/libexec/xpcproxy") == 0) {
         fakeEnvVar = "DYLD_INSERT_LIBRARIES="SupportFolderP"liblibinfect.dylib";
-    } else if (strcmp(path, "/System/Library/Frameworks/CryptoTokenKit.framework/ctkahp.bundle/Contents/MacOS/ctkahp") == 0)
-    {
+    } else if (PathRestricted(path) == false) {
+        if (LoadsAppKit(path, "AppKit") == 1) {
+            fakeEnvVar = "DYLD_INSERT_LIBRARIES="SupportFolderP"libopener.dylib";
+        } else {
+            return SpawnOld(pid, path, ac, ab, __argv, __envp);
+        }
+    } else {
         return SpawnOld(pid, path, ac, ab, __argv, __envp);
-    } else if (strcmp(path, "/System/Library/PrivateFrameworks/Heimdal.framework/Helpers/kcm") == 0)
-    {
-        return SpawnOld(pid, path, ac, ab, __argv, __envp);
-    } else if (strcmp(path, "/System/Library/Frameworks/CryptoTokenKit.framework/UserSelector") == 0)
-    {
-        return SpawnOld(pid, path, ac, ab, __argv, __envp);
-    } else if (strcmp(path, "/System/Library/Frameworks/CryptoTokenKit.framework/ctkd") == 0)
-    {
-        return SpawnOld(pid, path, ac, ab, __argv, __envp);
-    } else if (strcmp(path, "/System/Library/Frameworks/GSS.framework/Helpers/GSSCred") == 0)
-    {
-        return SpawnOld(pid, path, ac, ab, __argv, __envp);
-    } else if (strcmp(path, "/System/Library/CoreServices/iconservicesagent") == 0)
-    {
-        return SpawnOld(pid, path, ac, ab, __argv, __envp);
-    } else if (strcmp(path, "/System/Library/CoreServices/iconservicesd") == 0)
-    {
-        return SpawnOld(pid, path, ac, ab, __argv, __envp);
-    } else if (strcmp(path, "/usr/libexec/UserEventAgent") == 0)
-    {
-        return SpawnOld(pid, path, ac, ab, __argv, __envp);
-    } else if (strstr(path, "Wallpaper") != NULL)
-    {
-        return SpawnOld(pid, path, ac, ab, __argv, __envp);
-    } else if (strstr(path, "sandboxd") != NULL)
-    {
-        return SpawnOld(pid, path, ac, ab, __argv, __envp);
-    } else if (strstr(path, "Driver") != NULL)
-    {
-        return SpawnOld(pid, path, ac, ab, __argv, __envp);
-    } else if (strstr(path, "fileproviderd") != NULL)
-    {
-        return SpawnOld(pid, path, ac, ab, __argv, __envp);
-    } else
-    {
-        fakeEnvVar = "DYLD_INSERT_LIBRARIES="SupportFolderP"libopener.dylib";
     }
     
     int envCount = 0;
@@ -206,7 +237,7 @@ int SpawnNew(pid_t * pid, const char * path, const posix_spawn_file_actions_t * 
     int k = SpawnOld(pid, path, ac, ab, __argv, (char *const *)newEnvp);
     for (int i = 0; i <= envCount; i++) { free(newEnvp[i]); }
     free(newEnvp);
-    
+
     return k;
 }
 
