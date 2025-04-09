@@ -29,6 +29,7 @@ find_library(CORESYMBOLICATION_FRAMEWORK
     PATHS /System/Library/PrivateFrameworks
     REQUIRED
 )
+find_library(FD_FRAMEWORK Foundation REQUIRED)
 find_library(COCOA_FRAMEWORK Cocoa REQUIRED)
 find_library(COREFOUNDATION_FRAMEWORK CoreFoundation REQUIRED)
 
@@ -40,6 +41,7 @@ target_link_libraries(ammonia
 # Add custom library for libinfect
 add_library(libinfect SHARED
     libinfect/libinfect.c
+    libinfect/envbuf.c
     libinfect/frida-gum.h
 )
 
@@ -62,8 +64,28 @@ target_compile_options(ammonia PRIVATE
 
 
 # Add the opener library
-file(GLOB OPENER_SOURCES opener/*.c opener/*.h)
+file(GLOB OPENER_SOURCES opener/*.m opener/*.h)
 add_library(opener SHARED ${OPENER_SOURCES})
+target_link_libraries(opener
+    ${FD_FRAMEWORK}
+    ${CMAKE_CURRENT_SOURCE_DIR}/libfrida-gum-x86_64-arm64e-arm64.a
+)
 target_include_directories(opener PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+set(APP_SOURCES
+    app/main.m
+)
+
+# Add the main executable as a macOS app bundle
+add_executable(ammapp MACOSX_BUNDLE ${APP_SOURCES})
+
+# Set macOS bundle properties
+set_target_properties(ammapp PROPERTIES
+    MACOSX_BUNDLE_BUNDLE_NAME "Ammonia"
+    MACOSX_BUNDLE_GUI_IDENTIFIER "com.ammapp.ammonia"
+    MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
+    MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+    MACOSX_BUNDLE TRUE
 )
