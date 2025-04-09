@@ -28,7 +28,7 @@ echo "<?xml version=\\"1.0\\" encoding=\\"UTF-8\\"?>
     <string>com.bedtime.ammonia</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/usr/local/bin/ammonia/ammonia</string>
+        <string>/private/var/ammonia/core/ammonia</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
@@ -47,17 +47,23 @@ EOL
 # Make the postinstall script executable
 chmod +x "$ammoniabuildfolder/scripts/postinstall"
 
-
 # Create a temporary directory and setup the installation files in it.
 mkdir $ammoniabuildfolder/temp
-mkdir $ammoniabuildfolder/temp/tweaks
-cp $ammoniabuildfolder/./fridagum.dylib $ammoniabuildfolder/temp/
-cp $ammoniabuildfolder/./Build/ammonia $ammoniabuildfolder/temp/
-cp $ammoniabuildfolder/./Build/liblibinfect.dylib $ammoniabuildfolder/temp/
-cp $ammoniabuildfolder/./Build/libopener.dylib $ammoniabuildfolder/temp/
+mkdir $ammoniabuildfolder/temp/ammonia
+mkdir $ammoniabuildfolder/temp/ammonia/core
+mkdir $ammoniabuildfolder/temp/ammonia/core/tweaks
+cp $ammoniabuildfolder/./fridagum.dylib $ammoniabuildfolder/temp/ammonia/core/
+cp $ammoniabuildfolder/./Build/ammonia $ammoniabuildfolder/temp/ammonia/core/
+cp $ammoniabuildfolder/./Build/liblibinfect.dylib $ammoniabuildfolder/temp/ammonia/core/
+cp $ammoniabuildfolder/./Build/libopener.dylib $ammoniabuildfolder/temp/ammonia/core/
+
+chmod 777 "$ammoniabuildfolder/temp/ammonia/core/tweaks"
+
+mkdir $ammoniabuildfolder/temp/ammonia/core/gui
+chmod 777 "$ammoniabuildfolder/temp/ammonia/core/gui"
 
 # Build the package
-sudo pkgbuild --install-location /usr/local/bin/ammonia/ --root $ammoniabuildfolder/temp --scripts ./scripts --identifier net.bedtime.ammonia "$ammoniabuildfolder/ammonia.pkg"
+sudo pkgbuild --install-location /private/var/ --root $ammoniabuildfolder/temp --scripts ./scripts --identifier net.bedtime.ammonia "$ammoniabuildfolder/ammonia.pkg"
 rm -r $ammoniabuildfolder/scripts/
 
 # Remove the temporary directory

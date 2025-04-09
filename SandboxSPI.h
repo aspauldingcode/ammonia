@@ -23,6 +23,10 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <stdint.h>
+#include <unistd.h>
+#include <Security/Security.h>
+
 #if defined(__cplusplus)
 extern "C" {
 #endif
@@ -50,8 +54,14 @@ typedef struct {
     size_t available;
 } *sandbox_params_t;
 
-extern const char *const APP_SANDBOX_READ;
-extern const char *const APP_SANDBOX_READ_WRITE;
+extern const char *APP_SANDBOX_IOKIT_CLIENT;
+extern const char *APP_SANDBOX_MACH;
+extern const char *APP_SANDBOX_READ;
+extern const char *APP_SANDBOX_READ_WRITE;
+
+
+extern const uint32_t SANDBOX_EXTENSION_PREFIXMATCH;
+
 extern const enum sandbox_filter_type SANDBOX_CHECK_NO_REPORT;
 
 extern const uint32_t SANDBOX_EXTENSION_NO_REPORT;
@@ -59,6 +69,7 @@ extern const uint32_t SANDBOX_EXTENSION_CANONICAL;
 extern const uint32_t SANDBOX_EXTENSION_USER_INTENT;
 
 char *sandbox_extension_issue_file(const char *extension_class, const char *path, uint32_t flags);
+char *sandbox_extension_issue_posix_ipc(const char *extension_class, const char *name, uint32_t flags);
 char *sandbox_extension_issue_generic(const char *extension_class, uint32_t flags);
 char *sandbox_extension_issue_file_to_process(const char *extension_class, const char *path, uint32_t flags, audit_token_t);
 char *sandbox_extension_issue_mach_to_process(const char *extension_class, const char *name, uint32_t flags, audit_token_t);
@@ -68,6 +79,8 @@ int sandbox_check_by_audit_token(audit_token_t, const char *operation, enum sand
 int sandbox_container_path_for_pid(pid_t, char *buffer, size_t bufsize);
 int sandbox_extension_release(int64_t extension_handle);
 int sandbox_init_with_parameters(const char *profile, uint64_t flags, const char *const parameters[], char **errorbuf);
+int sandbox_init(const char *profile, uint64_t flags, char **errorbuf);
+int sandbox_init_with_extensions(const char *profile, uint64_t flags, const char *const extensions[], char **errorbuf);
 int64_t sandbox_extension_consume(const char *extension_token);
 sandbox_params_t sandbox_create_params(void);
 int sandbox_set_param(sandbox_params_t, const char *key, const char *value);

@@ -12,6 +12,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define SupportFolderP "/usr/local/bin/ammonia/"
+#define SupportFolderP "/private/var/ammonia/core/"
 
 #endif /* rosetta_h */
